@@ -1,0 +1,59 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand: #E30613;
+    --canvas: #F4F5F7;
+    --card: #FFFFFF;
+    --line: #E4E6EA;
+    --text: #1A1A1A;
+  }
+  .dark {
+    --canvas: #121212;
+    --card: #1A1A1A;
+    --line: #2C2C2C;
+    --text: #F2F2F2;
+  }
+  body { @apply bg-[var(--canvas)] text-[var(--text)] font-sans text-base antialiased; }
+  button:focus-visible, input:focus-visible { @apply outline outline-2 outline-offset-1 outline-brand; }
+}
+
+@layer components {
+  .odds-btn {
+    @apply relative flex h-9 min-w-[64px] flex-1 items-center justify-center rounded
+           text-sm font-bold tabular-nums transition-all duration-150;
+    background-color: #00a85a;
+    color: #ffffff;
+    border: 1px solid #00964f;
+  }
+  .odds-btn:hover {
+    background-color: #00bf68;
+    border-color: #00a85a;
+    box-shadow: 0 2px 6px rgb(0 168 90 / 25%);
+  }
+  .odds-btn[aria-pressed="true"] {
+    background-color: #087c43;
+    border-color: #075f35;
+    color: #ffffff;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 30%);
+  }
+  .odds-btn[data-suspended="true"] {
+    @apply pointer-events-none opacity-50;
+  }
+  .odds-up { @apply animate-flash-up; }
+  .odds-down { @apply animate-flash-down; }
+
+  .live-dot { @apply inline-block h-1.5 w-1.5 rounded-full bg-win-live animate-live-pulse; }
+  .cta-red { @apply rounded bg-brand px-4 py-2 text-sm font-bold text-white hover:bg-brand-dark active:scale-[.98]; }
+  .panel { @apply rounded-md border border-[var(--line)] bg-[var(--card)]; }
+  .row-tight { @apply flex items-center gap-2 px-2 py-1.5; }
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odds-up, .odds-down, .live-dot, .animate-badge-pop { animation: none !important; }
+}
+
