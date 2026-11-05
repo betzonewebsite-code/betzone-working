@@ -4,9 +4,7 @@ import "./globals.css";
 import LiveOddsBridge from "@/components/match/LiveOddsBridge";
 import AuthBootstrap from "@/components/auth/AuthBootstrap";
 import AuthModal from "@/components/auth/AuthModal";
-import Header from "@/components/layout/Header";
-import NavBar from "@/components/layout/NavBar";
-import BottomNav from "@/components/layout/BottomNav";
+import RouteChrome from "@/components/layout/RouteChrome";
 import MobileSlipSheet from "@/components/layout/MobileSlipSheet";
 
 export const metadata: Metadata = {
@@ -31,16 +29,12 @@ export default function RootLayout({
         <LiveOddsBridge />
         <AuthBootstrap />
 
-        <div className="relative z-40">
-          <Header />
-          <NavBar />
-        </div>
+        <RouteChrome />
 
         <div className="mx-auto min-h-screen w-full overflow-x-hidden rounded-t-[18px] bg-[var(--canvas)] pb-20 lg:rounded-t-[22px] lg:pb-0">
           {children}
         </div>
 
-        <BottomNav />
         <MobileSlipSheet />
         <AuthModal />
       </body>

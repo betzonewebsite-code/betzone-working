@@ -11,7 +11,7 @@
     "ingest": "tsx server/ingest/run.ts",
     "ingest:once": "tsx server/ingest/run.ts --once",
     "sports:check": "tsx server/tools/check.ts",
-    "dev:all": "concurrently -n web,platform,ingest -c red,green,blue \"next dev\" \"tsx server/platform.ts\" \"tsx server/ingest/run.ts\"",
+    "dev:all": "concurrently -n web,platform,ingest -c red,green,blue \"next dev --hostname 0.0.0.0\" \"tsx server/platform.ts\" \"tsx server/ingest/run.ts\"",
     "db:up": "docker compose up -d",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"

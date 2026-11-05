@@ -27,7 +27,7 @@ export default function ThreeCol({
         <LeftSidebar />
       </div>
 
-      <div className="min-w-0 w-full">
+      <div className="min-w-0 w-full overflow-x-clip">
         {children ?? (
           <>
             <div className={mobileHome ? "lg:hidden" : ""}>
@@ -59,3 +59,4 @@ export default function ThreeCol({
     </main>
   );
 }
+

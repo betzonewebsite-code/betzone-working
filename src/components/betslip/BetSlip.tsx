@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRef, useState } from "react";
 import Link from "next/link";
@@ -21,7 +21,11 @@ export default function BetSlip() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string; link?: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
-  const attempt = useRef<string>(crypto.randomUUID());
+  const attempt = useRef<string>(
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `betzone-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
 
   const odds = items.map((i) => i.odds);
   const blocked = items.some((i) => i.suspended);
@@ -494,3 +498,6 @@ function Row({
     </div>
   );
 }
+
+
+

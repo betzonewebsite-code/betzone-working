@@ -55,5 +55,3 @@
 @media (prefers-reduced-motion: reduce) {
   .odds-up, .odds-down, .live-dot, .animate-badge-pop { animation: none !important; }
 }
-
-

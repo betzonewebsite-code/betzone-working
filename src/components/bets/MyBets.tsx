@@ -31,7 +31,7 @@ export default function MyBets() {
     return () => { clearInterval(t); window.removeEventListener("bz:bets", onBet); };
   }, [user, refresh]);
 
-  if (status === "loading") return <p className="panel p-6 text-center text-sm text-neutral-500">Loadingâ€¦</p>;
+  if (status === "loading") return <p className="panel p-6 text-center text-sm text-neutral-500">Loading...</p>;
   if (!user) return <div className="panel space-y-3 p-6 text-center"><p className="text-sm">Log in to see your bets.</p><button onClick={() => useAuth.getState().openModal("login")} className="cta-red">Log in</button></div>;
 
   const lists: Record<Tab, TicketView[]> = { active: open, cashout: open.filter((t) => t.cashout.available), settled };
@@ -50,10 +50,12 @@ export default function MyBets() {
           </button>
         ))}
       </div>
-      {!loaded && <p className="panel p-6 text-center text-sm text-neutral-500">Loading your betsâ€¦</p>}
+      {!loaded && <p className="panel p-6 text-center text-sm text-neutral-500">Loading your bets...</p>}
       {loaded && shown.length === 0 && <p className="panel p-6 text-center text-sm text-neutral-500">{empty[tab]}</p>}
       {shown.map((t) => <BetCard key={t.id} ticket={t} onChanged={() => void refresh()} />)}
     </div>
   );
 }
+
+
 
