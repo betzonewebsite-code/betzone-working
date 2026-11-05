@@ -1,9 +1,11 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import OddsButton from "@/components/betslip/OddsButton";
-import type { Fixture } from "@/types";
+import VirtualOddsButton from "@/components/virtuals/VirtualOddsButton";
+import VirtualBetslip, { type VirtualSlipItem } from "@/components/virtuals/VirtualBetslip";
+import type { Fixture, Market, Selection } from "@/types";
 import { INSTANT_FOOTBALL_LEAGUES } from "@/lib/instantFootball";
+
 
 type Goal = { minute: number; side: "h" | "a" };
 
@@ -127,235 +129,86 @@ const LEAGUES = [
   {
     key: "VIRTUAL-PL",
     title: "Premier League",
-    subtitle: "20 clubs Ã‚Â· 10 fixtures",
+    subtitle: "20 clubs  |  10 fixtures",
   },
   {
     key: "VIRTUAL-CHAMPIONSHIP",
     title: "Championship",
-    subtitle: "24 clubs Ã‚Â· 12 fixtures",
+    subtitle: "24 clubs  |  12 fixtures",
   },
 ];
 
+const MARKET_TABS = [
+  { key: "1x2", label: "1X2" },
+  { key: "1up", label: "1X2 - 1UP" },
+  { key: "2up", label: "1X2 - 2UP" },
+  { key: "ou25", label: "O/U 2.5" },
+  { key: "gg", label: "GG/NG" },
+];
 
-function VirtualH2HModal({
-  fixture,
-  results,
-  onClose,
-}: {
-  fixture: VirtualFixture;
-  results: VirtualResult[];
-  onClose: () => void;
-}) {
-  const home = getTeamHistory(results, fixture.fixture.home);
-  const away = getTeamHistory(results, fixture.fixture.away);
+function getMarketForTab(
+  markets: Fixture["markets"],
+  key: string
+) {
+  if (key === "1x2") {
+    return markets.find(
+      (market) =>
+        market.id === "1x2" ||
+        /1x2|match result|full time result/i.test(market.name)
+    );
+  }
 
-  const recent = (team: string) =>
-    results
-      .filter((m) => m.home === team || m.away === team)
-      .slice(0, 5)
-      .map((m) => {
-        const isHome = m.home === team;
-        const scored = isHome ? m.hs : m.as;
-        const conceded = isHome ? m.as : m.hs;
-        return {
-          opponent: isHome ? m.away : m.home,
-          score: `${scored}:${conceded}`,
-          result: scored > conceded ? "W" : scored === conceded ? "D" : "L",
-          home: isHome,
-        };
-      });
+  const patterns: Record<string, RegExp> = {
+    "1up": /1\s*up|one goal/i,
+    "2up": /2\s*up|two goal/i,
+    "ou25": /over.?under.*2\.5|total goals.*2\.5|2\.5/i,
+    "gg": /gg\/ng|goal.?no goal|both teams to score/i,
+  };
 
-  const homeRecent = recent(fixture.fixture.home);
-  const awayRecent = recent(fixture.fixture.away);
-
-  const probabilityTotal =
-    (fixture.homeWin ?? 0) +
-    (fixture.draw ?? 0) +
-    (fixture.awayWin ?? 0);
-
-  const probability = (value: number | null) =>
-    probabilityTotal > 0 ? Math.round(((value ?? 0) / probabilityTotal) * 100) : 0;
-
-  const formPercent = (history: ReturnType<typeof getTeamHistory>) =>
-    history.played
-      ? Math.round(((history.wins * 3 + history.draws) / (history.played * 3)) * 100)
-      : 0;
-
-  const homeForm = formPercent(home);
-  const awayForm = formPercent(away);
-
-  const average = (goals: number, played: number) =>
-    played ? (goals / played).toFixed(1) : "0.0";
-
-  const resultColor = (result: string) =>
-    result === "W"
-      ? "bg-green-600 text-white"
-      : result === "D"
-        ? "bg-neutral-600 text-white"
-        : "bg-red-700 text-white";
-
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Head-to-head statistics"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[88dvh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-[#1b1e26] p-5 text-white shadow-2xl sm:rounded-2xl sm:p-7"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-extrabold">Stats - H2H</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close statistics"
-            className="rounded-full p-2 text-3xl leading-none text-neutral-400 hover:bg-white/10 hover:text-white"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="mb-6 flex items-center justify-center gap-3 text-center">
-          <span className="min-w-0 flex-1 truncate text-lg font-bold">
-            {fixture.fixture.home}
-          </span>
-          <span className="rounded-full bg-[#343844] px-3 py-2 text-xs font-bold text-neutral-300">
-            VS
-          </span>
-          <span className="min-w-0 flex-1 truncate text-lg font-bold">
-            {fixture.fixture.away}
-          </span>
-        </div>
-
-        <div className="mb-3 bg-[#343844] px-3 py-2 text-center text-sm font-semibold">
-          League Performance
-        </div>
-
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-4">
-          <div className="text-center">
-            <div className="mx-auto mb-2 flex h-28 w-28 max-w-full items-center justify-center rounded-full border-[7px] border-[#27c96b] text-3xl font-bold text-white">
-              {homeForm}%
-            </div>
-            <p className="text-sm text-neutral-300">FORM</p>
-            <p className="mt-2 text-xs text-neutral-400">
-              {home.wins}W · {home.draws}D · {home.losses}L
-            </p>
-          </div>
-
-          <div className="flex flex-col items-center gap-2 text-xs text-neutral-400">
-            <span className="rounded bg-[#27c96b] px-3 py-2 font-bold text-[#102719]">
-              {home.played}
-            </span>
-            <span className="h-16 w-1 bg-[#343844]" />
-            <span className="rounded bg-[#e31837] px-3 py-2 font-bold text-white">
-              {away.played}
-            </span>
-          </div>
-
-          <div className="text-center">
-            <div className="mx-auto mb-2 flex h-28 w-28 max-w-full items-center justify-center rounded-full border-[7px] border-[#e31837] text-3xl font-bold text-white">
-              {awayForm}%
-            </div>
-            <p className="text-sm text-neutral-300">FORM</p>
-            <p className="mt-2 text-xs text-neutral-400">
-              {away.wins}W · {away.draws}D · {away.losses}L
-            </p>
-          </div>
-        </div>
-
-        <div className="mb-3 bg-[#343844] px-3 py-2 text-center text-sm font-semibold">
-          Last 5 Matches
-        </div>
-
-        <div className="space-y-2">
-          {Array.from({ length: Math.max(homeRecent.length, awayRecent.length, 5) }).slice(0, 5).map((_, index) => {
-            const h = homeRecent[index];
-            const a = awayRecent[index];
-
-            return (
-              <div key={index} className="grid grid-cols-2 gap-3 text-xs sm:text-sm">
-                <div className="flex min-w-0 items-center gap-2">
-                  {h && <span className={`rounded px-2 py-1 font-bold ${resultColor(h.result)}`}>{h.result}</span>}
-                  <span className="min-w-0 flex-1 truncate text-neutral-300">{h ? `${h.opponent}  ${h.score}` : "No result yet"}</span>
-                </div>
-                <div className="flex min-w-0 items-center justify-end gap-2">
-                  <span className="min-w-0 flex-1 truncate text-right text-neutral-300">{a ? `${a.opponent}  ${a.score}` : "No result yet"}</span>
-                  {a && <span className={`rounded px-2 py-1 font-bold ${resultColor(a.result)}`}>{a.result}</span>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mb-3 mt-6 bg-[#343844] px-3 py-2 text-center text-sm font-semibold">
-          Win Probability
-        </div>
-
-        <div className="mb-2 flex justify-between text-sm">
-          <span className="font-bold text-[#27c96b]">{fixture.fixture.home}</span>
-          <span className="text-neutral-400">DRAW</span>
-          <span className="font-bold text-[#e31837]">{fixture.fixture.away}</span>
-        </div>
-
-        <div className="mb-2 flex justify-between text-lg font-bold">
-          <span className="text-[#27c96b]">{probability(fixture.homeWin)}%</span>
-          <span className="text-neutral-400">{probability(fixture.draw)}%</span>
-          <span className="text-[#e31837]">{probability(fixture.awayWin)}%</span>
-        </div>
-
-        <div className="flex h-5 w-full gap-1 overflow-hidden">
-          <div className="bg-[#27c96b]" style={{ width: `${probability(fixture.homeWin)}%` }} />
-          <div className="bg-neutral-500" style={{ width: `${probability(fixture.draw)}%` }} />
-          <div className="bg-[#e31837]" style={{ width: `${probability(fixture.awayWin)}%` }} />
-        </div>
-
-        <div className="mb-3 mt-6 bg-[#343844] px-3 py-2 text-center text-sm font-semibold">
-          Recent Stats
-        </div>
-
-        <div className="space-y-5">
-          <div>
-            <p className="mb-3 text-center text-sm text-neutral-300">Average Points</p>
-            <div className="grid grid-cols-2 gap-4 text-center">
-              <p className="text-xl font-bold text-[#27c96b]">
-                {home.played ? ((home.wins * 3 + home.draws) / home.played).toFixed(1) : "0.0"}
-              </p>
-              <p className="text-xl font-bold text-[#e31837]">
-                {away.played ? ((away.wins * 3 + away.draws) / away.played).toFixed(1) : "0.0"}
-              </p>
-            </div>
-          </div>
-
-          {[
-            { label: "Average Goals Scored", h: average(home.goalsFor, home.played), a: average(away.goalsFor, away.played) },
-            { label: "Average Goals Conceded", h: average(home.goalsAgainst, home.played), a: average(away.goalsAgainst, away.played) },
-          ].map((stat) => (
-            <div key={stat.label}>
-              <p className="mb-3 text-center text-sm text-neutral-300">{stat.label}</p>
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <p className="text-xl font-bold text-[#27c96b]">{stat.h}</p>
-                <p className="text-xl font-bold text-[#e31837]">{stat.a}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <p className="mt-6 text-center text-[11px] text-neutral-500">
-          Statistics are calculated from completed BETZONE Instant Football matches.
-        </p>
-      </div>
-    </div>
-  );
+  const pattern = patterns[key];
+  return pattern
+    ? markets.find((market) => pattern.test(market.name))
+    : undefined;
 }
 
 export default function VirtualsView() {
+  const [virtualItems, setVirtualItems] = useState<VirtualSlipItem[]>([]);
+  const [slipOpen, setSlipOpen] = useState(false);
+  const slipCount = virtualItems.length;
+
+  const toggleVirtualSelection = useCallback((
+    f: Fixture,
+    m: Market,
+    s: Selection
+  ) => {
+    const key = `${f.id}:${m.id}:${s.id}`;
+
+    setVirtualItems((current) => {
+      if (current.some((item) => item.key === key)) {
+        return current.filter((item) => item.key !== key);
+      }
+
+      const next: VirtualSlipItem = {
+        key,
+        oddsId: s.dbId,
+        fixtureId: f.id,
+        marketId: m.id,
+        selectionId: s.id,
+        match: `${f.home} v ${f.away}`,
+        marketName: m.name,
+        pick: s.label,
+        odds: s.odds,
+        pickedOdds: s.odds,
+      };
+
+      return [...current.filter((item) => item.fixtureId !== f.id), next];
+    });
+  }, []);
+  const [selectedLeague, setSelectedLeague] = useState("VIRTUAL-PL");
+  const [selectedMarket, setSelectedMarket] = useState("1x2");
   const [state, setState] = useState<State | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
-  const [statsFixtureId, setStatsFixtureId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const serverOffset = useRef(0);
@@ -439,7 +292,7 @@ export default function VirtualsView() {
   if (!state) {
     return (
       <p className="panel p-6 text-center text-sm text-neutral-500">
-        Loading virtual fixturesÃ¢â‚¬Â¦
+        Loading virtual fixtures...
       </p>
     );
   }
@@ -462,23 +315,60 @@ export default function VirtualsView() {
   ).length;
 
   return (
-    <div className="space-y-3">
-            <header className="panel flex items-center justify-between gap-3 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <button type="button" onClick={() => setSelectedMatchId(null)} aria-label="Back to virtual matches" className="flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg bg-ink-2 px-3 text-sm font-bold text-white hover:opacity-90">← Back to Virtuals</button>
-          <h1 className="truncate text-base font-extrabold text-ink dark:text-white">
-            Instant Football
-          </h1>
-        </div>
+    <div className="mx-auto min-h-screen w-full max-w-[480px] space-y-0 bg-white pb-[88px] text-[#222]">
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 bg-[#e8212b] px-4 text-white shadow-sm">
+        <h1 className="min-w-0 flex-1 truncate text-xl font-black italic tracking-tight">
+          BET<span className="text-[#ffe14a]">ZONE</span>
+          <span className="ml-2 text-base font-semibold not-italic">Instant Football</span>
+        </h1>
         <a
           href="/instant-virtual/my-bets"
           data-op="iv-bet-history-icon"
           aria-label="Instant Virtual Bet History"
-          className="shrink-0 rounded-lg bg-brand px-3 py-2 text-xs font-bold text-white hover:opacity-90"
+          className="shrink-0 rounded-lg bg-white/15 px-3 py-2 text-xs font-bold text-white"
         >
-          Bet History
+          My Bets
         </a>
       </header>
+
+      <nav className="sticky top-14 z-20 flex overflow-x-auto bg-[#3b404c] text-white shadow-sm">
+        {LEAGUES.map((league) => (
+          <button
+            key={league.key}
+            type="button"
+            onClick={() => {
+              setSelectedLeague(league.key);
+              setSelectedMatchId(null);
+            }}
+            className={`shrink-0 border-b-4 px-5 py-4 text-sm font-semibold ${
+              selectedLeague === league.key
+                ? "border-[#1fa24a] text-white"
+                : "border-transparent text-white/70"
+            }`}
+          >
+            {league.title}
+          </button>
+        ))}
+      </nav>
+
+      {!selectedMatchId && (
+        <nav className="sticky top-[112px] z-10 flex overflow-x-auto border-b border-[#e5e7eb] bg-white shadow-sm">
+          {MARKET_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setSelectedMarket(tab.key)}
+              className={`shrink-0 border-b-2 px-4 py-3 text-xs font-extrabold transition-colors ${
+                selectedMarket === tab.key
+                  ? "border-[#1fa24a] text-[#17703a]"
+                  : "border-transparent text-[#737985] hover:text-[#222]"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {error && (
         <p className="rounded-lg border border-drop/30 bg-drop/10 p-3 text-sm text-drop">
@@ -486,7 +376,7 @@ export default function VirtualsView() {
         </p>
       )}
 
-      {LEAGUES.map((league) => {
+      {LEAGUES.filter((league) => league.key === selectedLeague).map((league) => {
         const items = fixturesByLeague.get(league.key) ?? [];
 
         return (
@@ -508,7 +398,7 @@ export default function VirtualsView() {
 
             {items.length === 0 ? (
               <p className="panel p-4 text-center text-xs text-neutral-500">
-                Preparing replacement fixturesÃ¢â‚¬Â¦
+                Preparing replacement fixtures...
               </p>
             ) : (
               <div className="space-y-2">
@@ -588,13 +478,15 @@ export default function VirtualsView() {
                           {label}
                         </span>
 
-                        <div className="flex min-w-0 flex-1 gap-1">
+                        <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
                           {current.selections.map((selection) => (
-                            <OddsButton
+                            <VirtualOddsButton
                               key={selection.id}
                               f={displayFixture}
                               m={current}
                               s={selection}
+                              picked={virtualItems.some((item) => item.key === `${fixture.id}:${current.id}:${selection.id}`)}
+                              onToggle={toggleVirtualSelection}
                             />
                           ))}
                         </div>
@@ -605,75 +497,66 @@ export default function VirtualsView() {
                   return (
                     <article
                       key={fixture.id}
-                      className="panel space-y-2 p-3"
+                      className="overflow-hidden rounded-xl border border-[#e6e8ec] bg-white p-3 shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-2xs font-semibold uppercase tracking-wide text-neutral-500">
-                          Fixture #{item.roundNumber}
-                        </span>
+<div className="grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] items-center gap-2 rounded-lg bg-[#f6f7f9] p-2">
+                        <div className="min-w-0 space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMatchId(fixture.id)}
+                            className="flex w-full min-w-0 items-center justify-between gap-1 text-left text-xs font-bold"
+                            aria-label={`View markets for ${fixture.home} versus ${fixture.away}`}
+                          >
+                            <span className="min-w-0 truncate">{fixture.home}</span>
+                            {live && (
+                              <span className="shrink-0 font-extrabold tabular-nums">
+                                {score[0]}
+                              </span>
+                            )}
+                          </button>
 
-                        {live ? (
-                          <span className="flex items-center gap-1 text-2xs font-bold text-win-live">
-                            <span className="live-dot" />
-                            LIVE Ã‚Â· {minute}&apos; Ã‚Â· {secondsRemaining}s
-                          </span>
-                        ) : (
-                          <span className="rounded bg-win/10 px-2 py-1 text-2xs font-bold text-win">
-                            BETTING OPEN
-                          </span>
-                        )}
-                      </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMatchId(fixture.id)}
+                            className="flex w-full min-w-0 items-center justify-between gap-1 text-left text-xs font-bold"
+                          >
+                            <span className="min-w-0 truncate">{fixture.away}</span>
+                            {live && (
+                              <span className="shrink-0 font-extrabold tabular-nums">
+                                {score[1]}
+                              </span>
+                            )}
+                          </button>
 
-                      <div className="flex items-center justify-between gap-2 text-sm font-bold">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedMatchId(fixture.id)}
-                          className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg p-2 text-left hover:bg-ink-2/5"
-                          aria-label={`View markets for ${fixture.home} versus ${fixture.away}`}
-                        >
-                          <span className="min-w-0 flex-1 truncate">{fixture.home}</span>
-                          {live ? (
-                            <span className="shrink-0 rounded bg-ink-2 px-3 py-1 text-base font-extrabold tabular-nums text-white">
-                              {score[0]} - {score[1]}
-                            </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTeam(fixture.away)}
+                            className="text-left text-[10px] font-semibold text-brand hover:underline"
+                          >
+                            Profile
+                          </button>
+                        </div>
+
+                        {!selectedMatchId && (() => {
+                          const current = getMarketForTab(
+                            displayFixture.markets,
+                            selectedMarket
+                          );
+
+                          return current ? (
+                            marketRow(
+                              current.id,
+                              MARKET_TABS.find(
+                                (tab) => tab.key === selectedMarket
+                              )?.label ?? current.name
+                            )
                           ) : (
-                            <span className="shrink-0 text-neutral-400">v</span>
-                          )}
-                          <span className="min-w-0 flex-1 truncate text-right">{fixture.away}</span>
-                        </button>
-      <button
-        type="button"
-        onClick={() => setStatsFixtureId(fixture.id)}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#343844] bg-[#1b1e26] px-3 py-2 text-xs font-bold text-white hover:bg-[#292e39]"
-      >
-        <span className="text-[#27c96b]">▥</span>
-        Stats - H2H
-      </button>
-
-      {statsFixtureId === fixture.id && (
-        <VirtualH2HModal
-          fixture={item}
-          results={state.results}
-          onClose={() => setStatsFixtureId(null)}
-        />
-      )}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedTeam(fixture.away)}
-                          className="shrink-0 text-2xs font-normal text-brand hover:underline"
-                        >
-                          Profile
-                        </button>
+                            <p className="text-center text-[10px] text-neutral-500">
+                              Market unavailable
+                            </p>
+                          );
+                        })()}
                       </div>
-                      {!selectedMatchId && (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedMatchId(fixture.id)}
-                          className="w-full rounded-lg border border-[var(--line)] px-3 py-2 text-left text-xs font-bold text-brand hover:bg-brand/5"
-                        >
-                          View all markets â†’
-                        </button>
-                      )}
 
                       {item.homeStrength != null && item.awayStrength != null && (
                         <div className="grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-[#101820] p-2">
@@ -700,9 +583,9 @@ export default function VirtualsView() {
                                 <div className="bg-blue-500" style={{ width: `${awayPercent}%` }} />
                               </div>
                               <div className="mt-1 flex justify-between text-2xs font-semibold text-neutral-300">
-                                <span>1 Â· {homePercent}%</span>
-                                <span>X Â· {drawPercent}%</span>
-                                <span>2 Â· {awayPercent}%</span>
+                                <span>1  |  {homePercent}%</span>
+                                <span>X  |  {drawPercent}%</span>
+                                <span>2  |  {awayPercent}%</span>
                               </div>
                             </div>
                           )}
@@ -732,8 +615,8 @@ export default function VirtualsView() {
                             </span>
                           </div>
                           <div className="flex justify-between text-2xs font-semibold">
-                            <span className="text-red-400">Ã¢â€”Â HOME</span>
-                            <span className="text-blue-400">Ã¢â€”Â AWAY</span>
+                            <span className="text-red-400">HOME</span>
+                            <span className="text-blue-400">AWAY</span>
                           </div>
                         </div>
                       )}
@@ -816,13 +699,13 @@ export default function VirtualsView() {
                                 <div className="grid gap-3 md:grid-cols-2">
                                   <div>
                                     <h3 className="mb-2 text-xs font-extrabold text-ink dark:text-white">
-                                      {fixture.home} Â· Last 5
+                                      {fixture.home}  |  Last 5
                                     </h3>
                                     <ResultRows matches={homeRecent} team={fixture.home} />
                                   </div>
                                   <div>
                                     <h3 className="mb-2 text-xs font-extrabold text-ink dark:text-white">
-                                      {fixture.away} Â· Last 5
+                                      {fixture.away}  |  Last 5
                                     </h3>
                                     <ResultRows matches={awayRecent} team={fixture.away} />
                                   </div>
@@ -842,30 +725,23 @@ export default function VirtualsView() {
                               <h4 className="text-xs font-bold text-neutral-500">
                                 {current.name}
                               </h4>
-                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                              <div className="grid grid-cols-3 gap-2">
                                 {current.selections.map((selection) => (
-                                  <OddsButton
+                                  <VirtualOddsButton
                                     key={selection.id}
                                     f={displayFixture}
                                     m={current}
                                     s={selection}
+                                    picked={virtualItems.some((item) => item.key === `${fixture.id}:${current.id}:${selection.id}`)}
+                                    onToggle={toggleVirtualSelection}
                                   />
                                 ))}
                               </div>
                             </div>
                           ))}
                         </div>
-                      ) : (
-                        marketRow("1x2", "1X2")
-                      )}
+                      ) : null}
 
-                      <div className="border-t border-[var(--line)] pt-2">
-                        <p className="text-2xs text-neutral-500">
-                          {live
-                            ? "This fixture is currently in progress. Its odds are suspended."
-                            : "Select your odds and add them to your betslip. The match starts from your placed virtual bet ticket."}
-                        </p>
-                      </div>
                     </article>
                   );
                 })}
@@ -875,30 +751,6 @@ export default function VirtualsView() {
         );
       })}
 
-      <section className="space-y-2">
-        {INSTANT_FOOTBALL_LEAGUES.map((league) => (
-          <article
-            key={league.id}
-            className="panel flex flex-wrap items-center justify-between gap-3 p-3"
-          >
-            <div>
-              <h2 className="text-sm font-extrabold text-ink dark:text-white">
-                {league.name}
-              </h2>
-              <p className="text-2xs text-neutral-500">
-                Football instant virtual league Ã‚Â· Matches will be added later
-              </p>
-            </div>
-
-            <a
-              href={league.route}
-              className="rounded-md bg-brand px-4 py-2 text-xs font-extrabold text-white"
-            >
-              Open league
-            </a>
-          </article>
-        ))}
-      </section>
 
       {selectedTeam && (
         <section className="panel space-y-3 p-4">
@@ -954,52 +806,61 @@ export default function VirtualsView() {
           })()}
         </section>
       )}
-      {state.results.length > 0 && (
-        <section className="panel">
-          <h2 className="bg-ink-2 px-3 py-2 text-xs font-bold text-white">
-            Recent results
-          </h2>
 
-          {state.results.map((result) => (
-            <details
-              key={result.number}
-              className="border-b border-[var(--line)] px-3 py-2 last:border-0"
-            >
-              <summary className="cursor-pointer text-sm font-semibold">
-                {result.home}{" "}
-                <b className="tabular-nums">
-                  {result.hs} - {result.as}
-                </b>{" "}
-                {result.away}
-              </summary>
-
-              <div className="mt-2">
-                <Verify seed={result.seed} hash={result.seedHash} />
-              </div>
-            </details>
-          ))}
-        </section>
+      {slipOpen && (
+        <VirtualBetslip
+          items={virtualItems}
+          onRemove={(key) => setVirtualItems((items) => items.filter((item) => item.key !== key))}
+          onClear={() => setVirtualItems([])}
+          onClose={() => setSlipOpen(false)}
+        />
       )}
-
-      <section className="panel space-y-1 p-3 text-xs text-neutral-600">
-        <h2 className="font-bold text-ink dark:text-white">
-          How Instant Virtual Football works
-        </h2>
-
-        <p>
-          Browse fixtures, select available markets and odds, and add your
-          selections to the betslip. After a virtual bet is successfully
-          placed, its ticket appears in the separate Instant Virtual My Bets
-          section. Kick Off is available on that ticket only. Starting a
-          ticket runs the matches included in that ticket, and completed
-          results are settled through the platform settlement system.
-          Virtual matches cannot be cashed out or combined with other sports.
-          Play responsibly. 18+.
-        </p>
-      </section>
+      <div className="fixed bottom-0 left-1/2 z-40 grid h-16 w-full max-w-[480px] -translate-x-1/2 grid-cols-2 bg-[#1a1e26] shadow-[0_-4px_12px_rgba(0,0,0,0.15)]">
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedMatchId(null);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="flex items-center justify-center gap-2 bg-[#232833] text-base font-bold text-white"
+        >
+          Matches
+        </button>
+        <button
+          type="button"
+          onClick={() => setSlipOpen(true)}
+          className="flex items-center justify-center gap-2 bg-[#1fa24a] text-base font-bold text-white"
+        >
+          Betslip
+          {slipCount > 0 && (
+            <span className="rounded-xl bg-white px-2 py-0.5 text-xs font-extrabold text-[#111]">
+              {slipCount}
+            </span>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

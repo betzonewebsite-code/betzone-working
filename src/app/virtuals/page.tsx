@@ -1,7 +1,12 @@
-import ThreeCol from "@/components/layout/ThreeCol";
-import ClientOnly from "@/components/ui/ClientOnly";
+﻿import ClientOnly from "@/components/ui/ClientOnly";
 import VirtualsView from "@/components/virtuals/VirtualsView";
 
 export default function Page() {
-  return <ThreeCol><ClientOnly><VirtualsView /></ClientOnly></ThreeCol>;
+  return (
+    <main className="min-h-screen w-full">
+      <ClientOnly>
+        <VirtualsView />
+      </ClientOnly>
+    </main>
+  );
 }
