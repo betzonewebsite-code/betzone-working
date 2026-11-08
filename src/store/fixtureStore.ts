@@ -22,7 +22,23 @@ export const useFixtureStore = create<State>((set, get) => ({
     const r = await api("/api/fixtures?when=all&limit=200");
     if (r.ok) set({ fixtures: r.data.fixtures as Fixture[], loaded: true });
   },
-  upsert: (f) => set((s) => ({ fixtures: s.fixtures.some((x) => x.id === f.id) ? s.fixtures.map((x) => (x.id === f.id ? f : x)) : [...s.fixtures, f] })),
+  upsert: (f) => set((s) => {
+    const existing = s.fixtures.find((x) => x.id === f.id);
+    const merged: Fixture = existing
+      ? {
+          ...existing,
+          ...f,
+          homeLogo: f.homeLogo ?? existing.homeLogo ?? null,
+          awayLogo: f.awayLogo ?? existing.awayLogo ?? null,
+        }
+      : f;
+
+    return {
+      fixtures: existing
+        ? s.fixtures.map((x) => (x.id === f.id ? merged : x))
+        : [...s.fixtures, merged],
+    };
+  }),
   setConnected: (connected) => set({ connected }),
 
   apply: (changes) => {

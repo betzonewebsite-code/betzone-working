@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import { fetchWithProviderFallback } from "./providerManager";
 
 type Row = Record<string, unknown>;
@@ -39,7 +39,7 @@ export async function fetchSportmonksSnapshot(): Promise<SportmonksPayload | nul
     {
       provider: "sportmonks",
       endpoint: `fixtures/between/${start}/${end}`,
-      params: { per_page: "50" },
+      params: { per_page: "50", include: "participants" },
     },
   ]);
 

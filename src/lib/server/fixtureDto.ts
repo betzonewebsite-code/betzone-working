@@ -1,4 +1,4 @@
-﻿import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 export const fixtureInclude = { league: true, markets: { include: { odds: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } } } satisfies Prisma.FixtureInclude;
 export type FixtureFull = Prisma.FixtureGetPayload<{ include: typeof fixtureInclude }>;
@@ -38,7 +38,7 @@ export function toClientFixture(f: FixtureFull) {
   const live = f.status === "LIVE" || f.status === "HALFTIME";
   return {
     id: f.id, sport: f.sport.toLowerCase(), country: f.league.country, league: f.league.name, leagueKey: f.league.externalId,
-    home: f.homeTeam, away: f.awayTeam, kickoff: f.kickoffAt.toISOString(),
+    home: f.homeTeam, away: f.awayTeam, homeLogo: f.homeLogo, awayLogo: f.awayLogo, kickoff: f.kickoffAt.toISOString(),
     live, status: f.status, minute: f.minute, period: f.period, score: live || f.status === "FINISHED" ? [f.homeScore, f.awayScore] : undefined,
     bettingOpen: f.bettingOpen, marketCount: f.markets.length,
     markets: [...f.markets].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type)).map((m) => ({

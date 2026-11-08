@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -68,6 +68,42 @@ function initials(name: string) {
     .map((part) => part[0] ?? "")
     .join("")
     .toUpperCase();
+}
+
+function TeamCrest({
+  src,
+  name,
+  dark = false,
+}: {
+  src?: string | null;
+  name: string;
+  dark?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  if (!src || failed) {
+    return (
+      <span
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[9px] font-extrabold ${
+          dark
+            ? "bg-white/10 text-white/75"
+            : "bg-[#F0F3F5] text-[#53616B]"
+        }`}
+      >
+        {initials(name)}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={`${name} crest`}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="h-7 w-7 shrink-0 rounded-full bg-white object-contain p-0.5"
+    />
+  );
 }
 
 function formatKickoff(value: string) {
@@ -186,15 +222,11 @@ function MatchCard({
                 key={`${fixture.id}-${index}`}
                 className="flex min-w-0 items-center gap-2"
               >
-                <span
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[9px] font-extrabold ${
-                    dark
-                      ? "bg-white/10 text-white/75"
-                      : "bg-[#F0F3F5] text-[#53616B]"
-                  }`}
-                >
-                  {initials(team)}
-                </span>
+                <TeamCrest
+                  src={index === 0 ? fixture.homeLogo : fixture.awayLogo}
+                  name={team}
+                  dark={dark}
+                />
 
                 <span
                   className={`min-w-0 truncate text-xs font-bold ${teamText}`}

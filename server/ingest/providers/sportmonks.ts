@@ -46,6 +46,37 @@ function parseTeams(name: string): [string, string] | null {
   return [parts[0].trim(), parts[1].trim()];
 }
 
+function participantLogo(
+  fixture: Row,
+  side: "home" | "away",
+): string | null {
+  const participants = fixture.participants;
+
+  if (!Array.isArray(participants)) return null;
+
+  for (const participant of participants) {
+    if (
+      !participant ||
+      typeof participant !== "object" ||
+      Array.isArray(participant)
+    ) {
+      continue;
+    }
+
+    const row = participant as Row;
+    const meta =
+      row.meta && typeof row.meta === "object" && !Array.isArray(row.meta)
+        ? (row.meta as Row)
+        : {};
+
+    if (text(meta.location).toLowerCase() !== side) continue;
+
+    const image = text(row.image_path);
+    if (image) return image;
+  }
+
+  return null;
+}
 function marketType(description: string): MarketType | null {
   const value = description.toLowerCase();
 
@@ -237,6 +268,8 @@ export const sportmonks: Provider = {
         leagueKey: key,
         home: teams[0],
         away: teams[1],
+        homeLogo: participantLogo(fixture, "home"),
+        awayLogo: participantLogo(fixture, "away"),
         kickoff,
         status: "SCHEDULED" as FixtureStatus,
         minute: null,

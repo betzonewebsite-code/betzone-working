@@ -31,6 +31,8 @@ externalId: string;
 leagueKey: string;
 home: string;
 away: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
 kickoff: Date;
 status: FixtureStatus;
 minute: number | null;

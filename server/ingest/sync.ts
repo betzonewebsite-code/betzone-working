@@ -1,4 +1,4 @@
-﻿import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { db } from "../../src/lib/server/db";
 import { redisReady } from "../../src/lib/server/redis";
 import { LEAGUES } from "./leagues";
@@ -76,7 +76,7 @@ async function upsertOne(n: NFixture, def: LeagueDef): Promise<FixtureChange | n
   if (!fx) {
     fx = await db.fixture.create({
       data: {
-        source: n.source, externalId: n.externalId, leagueId: lid, sport: def.sport, homeTeam: n.home, awayTeam: n.away, kickoffAt: n.kickoff,
+        source: n.source, externalId: n.externalId, leagueId: lid, sport: def.sport, homeTeam: n.home, awayTeam: n.away, homeLogo: n.homeLogo ?? null, awayLogo: n.awayLogo ?? null, kickoffAt: n.kickoff,
         status: n.status, minute: n.minute, period: n.period, homeScore: score?.[0] ?? 0, awayScore: score?.[1] ?? 0, lastSyncedAt: new Date(),
       },
     });
@@ -88,12 +88,13 @@ async function upsertOne(n: NFixture, def: LeagueDef): Promise<FixtureChange | n
     const finishing = status === "FINISHED" && fx.status !== "FINISHED";
     const confirmedFinal = status === "FINISHED" && n.finalized === true;
     const goal = def.sport === "SOCCER" && fx.status === "LIVE" && status === "LIVE" && hs + as > fx.homeScore + fx.awayScore;
-    const changed = fx.status !== status || fx.minute !== n.minute || fx.period !== n.period || fx.homeScore !== hs || fx.awayScore !== as || fx.kickoffAt.getTime() !== n.kickoff.getTime();
+    const logoChanged = (n.homeLogo != null && n.homeLogo !== fx.homeLogo) || (n.awayLogo != null && n.awayLogo !== fx.awayLogo);
+    const changed = fx.status !== status || fx.minute !== n.minute || fx.period !== n.period || fx.homeScore !== hs || fx.awayScore !== as || fx.kickoffAt.getTime() !== n.kickoff.getTime() || logoChanged;
     if (changed || confirmedFinal) {
       fx = await db.fixture.update({
         where: { id: fx.id },
         data: {
-          status, minute: n.minute, period: n.period, homeScore: hs, awayScore: as, kickoffAt: n.kickoff, lastSyncedAt: new Date(),
+          status, minute: n.minute, period: n.period, homeScore: hs, awayScore: as, ...(n.homeLogo ? { homeLogo: n.homeLogo } : {}), ...(n.awayLogo ? { awayLogo: n.awayLogo } : {}), kickoffAt: n.kickoff, lastSyncedAt: new Date(),
           ...(confirmedFinal ? { result: { final: [hs, as], source: n.source, finalizedAt: new Date().toISOString() } as Prisma.InputJsonValue } : {}),
           ...(status === "FINISHED" ? { bettingOpen: false } : {}),
         },
@@ -173,6 +174,133 @@ async function cleanupStaleLiveFixtures(): Promise<void> {
   }
 }
 
+function normalizeLogoTeamName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\b(football club|fc|cf|afc|sc|ac)\b/g, " ")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Copies missing football crests from matching Sportmonks fixtures.
+ * Matching requires the same league, home team, away team and a
+ * kickoff difference of no more than six hours.
+ */
+export async function enrichFixtureLogos(): Promise<number> {
+  const [sources, targets] = await Promise.all([
+    db.fixture.findMany({
+      where: {
+        sport: "SOCCER",
+        source: "sportmonks",
+        OR: [
+          { homeLogo: { not: null } },
+          { awayLogo: { not: null } },
+        ],
+      },
+      select: {
+        leagueId: true,
+        homeTeam: true,
+        awayTeam: true,
+        kickoffAt: true,
+        homeLogo: true,
+        awayLogo: true,
+      },
+    }),
+    db.fixture.findMany({
+      where: {
+        sport: "SOCCER",
+        source: { not: "sportmonks" },
+        OR: [
+          { homeLogo: null },
+          { awayLogo: null },
+        ],
+      },
+      select: {
+        id: true,
+        leagueId: true,
+        homeTeam: true,
+        awayTeam: true,
+        kickoffAt: true,
+        homeLogo: true,
+        awayLogo: true,
+      },
+    }),
+  ]);
+
+  const sourceIndex = new Map<string, typeof sources>();
+
+  for (const source of sources) {
+    const key = [
+      source.leagueId,
+      normalizeLogoTeamName(source.homeTeam),
+      normalizeLogoTeamName(source.awayTeam),
+    ].join("|");
+
+    const existing = sourceIndex.get(key) ?? [];
+    existing.push(source);
+    sourceIndex.set(key, existing);
+  }
+
+  const maxDifferenceMs = 6 * 60 * 60 * 1000;
+  let updated = 0;
+
+  for (const target of targets) {
+    const key = [
+      target.leagueId,
+      normalizeLogoTeamName(target.homeTeam),
+      normalizeLogoTeamName(target.awayTeam),
+    ].join("|");
+
+    const candidates = sourceIndex.get(key);
+    if (!candidates?.length) continue;
+
+    let bestHome: (typeof candidates)[number] | undefined;
+    let bestAway: (typeof candidates)[number] | undefined;
+    let homeDifference = maxDifferenceMs + 1;
+    let awayDifference = maxDifferenceMs + 1;
+
+    for (const candidate of candidates) {
+      const difference = Math.abs(
+        candidate.kickoffAt.getTime() - target.kickoffAt.getTime(),
+      );
+
+      if (difference > maxDifferenceMs) continue;
+
+      if (candidate.homeLogo && difference < homeDifference) {
+        bestHome = candidate;
+        homeDifference = difference;
+      }
+
+      if (candidate.awayLogo && difference < awayDifference) {
+        bestAway = candidate;
+        awayDifference = difference;
+      }
+    }
+
+    const data: { homeLogo?: string; awayLogo?: string } = {};
+
+    if (!target.homeLogo && bestHome?.homeLogo) {
+      data.homeLogo = bestHome.homeLogo;
+    }
+
+    if (!target.awayLogo && bestAway?.awayLogo) {
+      data.awayLogo = bestAway.awayLogo;
+    }
+
+    if (Object.keys(data).length === 0) continue;
+
+    await db.fixture.update({
+      where: { id: target.id },
+      data,
+    });
+
+    updated++;
+  }
+
+  return updated;
+}
 export async function syncOnce(
   provider: Provider,
   opts: { live: boolean },

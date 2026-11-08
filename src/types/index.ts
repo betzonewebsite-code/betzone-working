@@ -1,7 +1,7 @@
-﻿export type Selection = { id: string; dbId: string; label: string; odds: number; previous?: number | null; locked?: boolean; suspended?: boolean };
+export type Selection = { id: string; dbId: string; label: string; odds: number; previous?: number | null; locked?: boolean; suspended?: boolean };
 export type Market = { id: string; dbId: string; name: string; line?: number | null; lineKey?: string; selections: Selection[] };
 export type Fixture = {
-  id: string; sport: string; country: string; league: string; leagueKey?: string; home: string; away: string;
+  id: string; sport: string; country: string; league: string; leagueKey?: string; home: string; away: string; homeLogo?: string | null; awayLogo?: string | null;
   kickoff: string; live: boolean; status?: string; minute?: number | null; period?: string | null;
   score?: [number, number]; bettingOpen?: boolean; marketCount: number; markets: Market[];
 };

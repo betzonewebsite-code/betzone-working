@@ -1,29 +1,33 @@
 ﻿"use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 const SLIDES = [
   {
-    type: "image",
     title: "BETZONE GH promotional banner",
+    image: "/betzone-banner.png",
+    alt: "BETZONE GH promotional banner",
   },
   {
-    type: "text",
-    title: "Cash out before the final whistle",
-    sub: "Take your winnings early, or cash out part and keep the rest running.",
-    cta: "My bets",
-    href: "/my-bets",
-    bg: "from-ink-3 to-ink",
+    title: "BETZONE Instant Virtuals",
+    image: "/instant-virtuals-banner.png",
+    alt: "BETZONE Instant Virtuals promotional banner",
   },
   {
-    type: "text",
-    title: "Share your slip with a booking code",
-    sub: "Book a bet, share the code, and load slips from other players.",
-    cta: "Open the feed",
-    href: "/feed",
-    bg: "from-win to-ink",
+    title: "BETZONE Football Betting",
+    image: "/football-betting-banner.png",
+    alt: "BETZONE football betting promotion",
+  },
+  {
+    title: "BETZONE Cash Out",
+    image: "/cashout-banner.png",
+    alt: "BETZONE Cash Out promotion",
+  },
+  {
+    title: "BETZONE Dream Big",
+    image: "/inspiring-banner.png",
+    alt: "BETZONE Dream Big, Bet Bigger promotion",
   },
 ];
 
@@ -32,7 +36,10 @@ export default function BannerCarousel() {
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
-    if (paused || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (
+      paused ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) return;
 
     const id = setInterval(() => {
       setI((n) => (n + 1) % SLIDES.length);
@@ -61,33 +68,15 @@ export default function BannerCarousel() {
             aria-hidden={n !== i}
             className="min-w-full"
           >
-            {s.type === "image" ? (
-              <Image
-                src="/betzone-banner.png"
-                alt="BETZONE GH — Big wins, bigger excitement. Play, bet and win."
-                width={1648}
-                height={928}
-                priority
-                sizes="(max-width: 768px) 100vw, 1400px"
-                className="block h-auto w-full"
-              />
-            ) : (
-              <div className={`flex min-h-28 flex-col justify-center bg-gradient-to-r p-4 text-white lg:min-h-36 lg:p-6 ${s.bg}`}>
-                <h2 className="text-lg font-extrabold leading-tight lg:text-2xl">
-                  {s.title}
-                </h2>
-                <p className="mt-1 max-w-md text-sm text-white/85">
-                  {s.sub}
-                </p>
-                <Link
-                  href={s.href!}
-                  tabIndex={n === i ? 0 : -1}
-                  className="mt-2 w-fit rounded bg-white px-3 py-1 text-xs font-bold text-ink"
-                >
-                  {s.cta}
-                </Link>
-              </div>
-            )}
+            <Image
+              src={s.image}
+              alt={s.alt}
+              width={1792}
+              height={1024}
+              priority={n === 0}
+              sizes="(max-width: 768px) 100vw, 1400px"
+              className="block h-auto w-full"
+            />
           </div>
         ))}
       </div>
@@ -96,7 +85,8 @@ export default function BannerCarousel() {
         {SLIDES.map((s, n) => (
           <button
             key={s.title}
-            aria-label={`Show slide ${n + 1}`}
+            type="button"
+            aria-label={`Show slide ${n + 1}: ${s.title}`}
             aria-current={n === i}
             onClick={() => setI(n)}
             className={`h-1.5 rounded-full transition-all ${
@@ -108,4 +98,3 @@ export default function BannerCarousel() {
     </section>
   );
 }
-

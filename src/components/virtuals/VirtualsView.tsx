@@ -11,6 +11,8 @@ type Goal = { minute: number; side: "h" | "a" };
 
 type VirtualFixture = {
   roundNumber: number;
+  season?: number | null;
+  matchday?: number | null;
   status: "BETTING" | "PLAYING";
   seedHash: string;
   startedAt: string | null;
@@ -29,6 +31,8 @@ type VirtualFixture = {
 
 type VirtualResult = {
   number: number;
+  season?: number | null;
+  matchday?: number | null;
   seed: string;
   seedHash: string;
   leagueKey: string;
@@ -207,12 +211,80 @@ export default function VirtualsView() {
   const [selectedLeague, setSelectedLeague] = useState("VIRTUAL-PL");
   const [selectedMarket, setSelectedMarket] = useState("1x2");
   const [state, setState] = useState<State | null>(null);
+
+  // Permanent virtual match history (loaded separately from live polling).
+  const [historyResults, setHistoryResults] = useState<VirtualResult[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<number | null>(null);
+  const historyCursorRef = useRef<number | null>(null);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const serverOffset = useRef(0);
   const refreshInFlight = useRef(false);
+
+  const loadHistory = useCallback(async (reset = false) => {
+    const cursor = reset ? null : historyCursorRef.current;
+
+    if (!reset && cursor === null) return;
+
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const params = new URLSearchParams({
+        league: selectedLeague,
+        limit: "10",
+      });
+
+      if (cursor !== null) {
+        params.set("cursor", String(cursor));
+      }
+
+      const response = await fetch(
+        `/api/virtuals/history?${params.toString()}`,
+        {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Could not load match history.");
+      }
+
+      const results = Array.isArray(data.results)
+        ? (data.results as VirtualResult[])
+        : [];
+
+      setHistoryResults((current) =>
+        reset ? results : [...current, ...results]
+      );
+      const nextCursor = data.nextCursor ?? null;
+      historyCursorRef.current = nextCursor;
+      setHistoryCursor(nextCursor);
+      setHistoryHasMore(Boolean(data.hasMore));
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error ? err.message : "Unable to load match history."
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [selectedLeague]);
+
+  useEffect(() => {
+    setHistoryResults([]);
+    setHistoryCursor(null);
+    setHistoryHasMore(false);
+    void loadHistory(true);
+  }, [selectedLeague, loadHistory]);
 
   const refresh = useCallback(async () => {
     if (document.visibilityState === "hidden") return;
@@ -499,6 +571,10 @@ export default function VirtualsView() {
                       key={fixture.id}
                       className="overflow-hidden rounded-xl border border-[#e6e8ec] bg-white p-3 shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
                     >
+                      <div className="mb-2 flex items-center justify-between text-2xs font-bold text-neutral-500">
+                        <span>SEASON {item.season ?? 1} · MATCHDAY {item.matchday ?? item.roundNumber}</span>
+                        <span>FIXTURE {item.roundNumber}</span>
+                      </div>
 <div className="grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] items-center gap-2 rounded-lg bg-[#f6f7f9] p-2">
                         <div className="min-w-0 space-y-2">
                           <button
@@ -633,6 +709,58 @@ export default function VirtualsView() {
 
                       {selectedMatchId && (
                         <section className="space-y-3 border-t border-[var(--line)] pt-3">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-2xs font-bold uppercase tracking-wider text-brand">Permanent archive</p>
+                            <h3 className="text-sm font-extrabold text-ink dark:text-white">Match History</h3>
+                          </div>
+                          <span className="text-2xs font-semibold text-neutral-500">{historyResults.length} loaded</span>
+                        </div>
+
+                        {historyError && (
+                          <p className="rounded-lg bg-red-500/10 p-3 text-xs text-red-500">{historyError}</p>
+                        )}
+
+                        {historyResults.length === 0 && !historyLoading ? (
+                          <p className="rounded-lg bg-ink-2/5 p-3 text-xs text-neutral-500 dark:bg-white/5">
+                            No completed matches are available in this league yet.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {historyResults.map((match) => (
+                              <div key={`${match.number}-${match.leagueKey}`} className="rounded-lg bg-ink-2/5 p-3 dark:bg-white/5">
+                                <div className="mb-2 flex items-center justify-between gap-2 text-2xs font-bold text-neutral-500">
+                                  <span>SEASON {match.season ?? 1} · MATCHDAY {match.matchday ?? match.number}</span>
+                                  <span>FIXTURE {match.number}</span>
+                                </div>
+                                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-xs font-bold text-ink dark:text-white">
+                                  <span>{match.home}</span>
+                                  <span className="rounded bg-white px-3 py-2 text-sm font-extrabold tabular-nums dark:bg-[#252b36]">
+                                    {match.hs} - {match.as}
+                                  </span>
+                                  <span className="text-right">{match.away}</span>
+                                </div>
+                                <p className="mt-2 text-right text-2xs font-semibold text-emerald-600">FULL TIME</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {historyLoading && (
+                          <p className="py-2 text-center text-xs text-neutral-500">Loading match history...</p>
+                        )}
+
+                        {historyHasMore && !historyLoading && (
+                          <button
+                            type="button"
+                            onClick={() => void loadHistory(false)}
+                            className="w-full rounded-lg border border-ink/10 px-4 py-3 text-xs font-bold text-ink dark:border-white/10 dark:text-white"
+                          >
+                            Load More Matches
+                          </button>
+                        )}
+                      </div>
                           {(() => {
                             const results = [...state.results];
                             const headToHead = results.filter(
@@ -842,33 +970,3 @@ export default function VirtualsView() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -59,10 +59,28 @@ function getKickoffDetails(kickoff: string) {
   };
 }
 
-function TeamBadge({ name }: { name: string }) {
+function TeamBadge({
+  name,
+  logo,
+}: {
+  name: string;
+  logo?: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+
   return (
-    <div className="mx-auto flex h-[68px] w-[68px] items-center justify-center rounded-full border border-neutral-200 bg-neutral-50 text-xl font-extrabold text-neutral-600 shadow-sm sm:h-20 sm:w-20 sm:text-2xl">
-      {getTeamInitials(name)}
+    <div className="mx-auto flex h-[68px] w-[68px] items-center justify-center rounded-full border border-neutral-200 bg-white text-xl font-extrabold text-neutral-600 shadow-sm sm:h-20 sm:w-20 sm:text-2xl">
+      {logo && !failed ? (
+        <img
+          src={logo}
+          alt={`${name} crest`}
+          loading="lazy"
+          className="h-12 w-12 object-contain sm:h-14 sm:w-14"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        getTeamInitials(name)
+      )}
     </div>
   );
 }
@@ -117,7 +135,7 @@ function MatchHeader({ fixture }: { fixture: Fixture }) {
 
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-5">
           <div className="min-w-0 text-center">
-            <TeamBadge name={fixture.home} />
+            <TeamBadge name={fixture.home} logo={fixture.homeLogo} />
             <h1 className="mt-3 break-words text-sm font-bold leading-tight text-neutral-900 sm:text-base">
               {fixture.home}
             </h1>
@@ -160,7 +178,7 @@ function MatchHeader({ fixture }: { fixture: Fixture }) {
           </div>
 
           <div className="min-w-0 text-center">
-            <TeamBadge name={fixture.away} />
+            <TeamBadge name={fixture.away} logo={fixture.awayLogo} />
             <h2 className="mt-3 break-words text-sm font-bold leading-tight text-neutral-900 sm:text-base">
               {fixture.away}
             </h2>

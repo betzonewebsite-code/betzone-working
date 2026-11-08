@@ -78,6 +78,8 @@ export async function virtualState() {
 
     return [{
       roundNumber: round.number,
+      season: round.season,
+      matchday: round.matchday,
       status: playing ? "PLAYING" : "BETTING",
       seedHash: round.seedHash,
       startedAt: playing ? round.betsCloseAt.toISOString() : null,
@@ -103,6 +105,8 @@ export async function virtualState() {
   const results = doneRounds.flatMap((round) =>
     (round.matches as Match[]).map((match) => ({
       number: round.number,
+      season: round.season,
+      matchday: round.matchday,
       seed: round.seed,
       seedHash: round.seedHash,
       leagueKey: match.leagueKey ?? "",

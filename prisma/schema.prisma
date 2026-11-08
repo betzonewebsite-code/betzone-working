@@ -152,6 +152,8 @@ model Fixture {
   sport          Sport
   homeTeam       String
   awayTeam       String
+  homeLogo      String?
+  awayLogo      String?
   kickoffAt      DateTime
   status         FixtureStatus  @default(SCHEDULED)
   minute         Int?
@@ -371,6 +373,8 @@ model FeedReport {
 model VirtualRound {
   id          String        @id @default(cuid())
   number      Int           @unique
+  season      Int?
+  matchday    Int?
   seedHash    String
   seed        String
   status      VirtualStatus @default(BETTING)
@@ -380,6 +384,7 @@ model VirtualRound {
   createdAt   DateTime      @default(now())
 
   @@index([status, number])
+  @@index([season, matchday])
 }
 
 model VirtualTicketSession {

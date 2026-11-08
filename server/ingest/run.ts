@@ -1,11 +1,12 @@
-﻿import { env } from "../../src/lib/server/env";
+import { env } from "../../src/lib/server/env";
 import { redis } from "../../src/lib/server/redis";
 import { LEAGUES, updateDiscoveredLeagues } from "./leagues";
 import { reconcile } from "./reconcile";
 import { sportmonks } from "./providers/sportmonks";
 import { sportsGameOdds } from "./providers/sportsgameodds";
 import { theOddsApi } from "./providers/theoddsapi";
-import { sweepReopen, syncOnce } from "./sync";
+import { enrichFixtureLogos, sweepReopen, syncOnce } from "./sync";
+import { enrichMissingTeamCrests } from "./teamCrests";
 import type { LeagueDef, Provider } from "./types";
 
 const providerByName: Record<string, Provider> = {
@@ -127,6 +128,34 @@ async function runOnce(): Promise<void> {
     }
   }
 
+  // Enrich provider fixtures with matching Sportmonks team crests.
+  try {
+    const enriched = await enrichFixtureLogos();
+
+    if (enriched > 0) {
+      console.log(`[ingest] Added missing crests to ${enriched} fixtures.`);
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : String(error);
+
+    failures.push(`crest enrichment: ${message}`);
+    console.error(`[ingest] Crest enrichment failed: ${message}`);
+  }
+  // TheSportsDB crest enrichment for teams not covered by Sportmonks.
+  try {
+    const enrichedTeams = await enrichMissingTeamCrests();
+
+    if (enrichedTeams > 0) {
+      console.log(`[ingest] TheSportsDB added crests to ${enrichedTeams} fixtures.`);
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : String(error);
+
+    failures.push(`TheSportsDB crest enrichment: ${message}`);
+    console.error(`[ingest] TheSportsDB crest enrichment failed: ${message}`);
+  }
   // Reconciliation is less frequent to avoid unnecessary provider requests.
   const now = Date.now();
 

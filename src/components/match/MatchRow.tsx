@@ -1,12 +1,35 @@
 ﻿"use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Shield } from "lucide-react";
 import OddsButton from "@/components/betslip/OddsButton";
 import { useLiveFixture } from "./useLiveFixture";
 import type { Fixture } from "@/types";
 import type { Tab } from "./MarketTabs";
 import { orderMarketSelections } from "@/lib/marketOrder";
+
+function TeamCrest({ src }: { src?: string | null }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!src || failed) {
+    return (
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+        <Shield size={13} className="text-neutral-300" />
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      className="h-4 w-4 shrink-0 object-contain"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 export default function MatchRow({
   fixture,
@@ -47,6 +70,7 @@ export default function MatchRow({
         className="flex min-w-0 flex-col justify-center gap-1 text-[11px] leading-tight text-[#263238] hover:text-[#e30613] sm:flex-1 sm:gap-1 sm:text-[13px]"
       >
         <div className="flex min-w-0 items-center gap-1">
+          <TeamCrest src={f.homeLogo} />
           <span className="min-w-0 flex-1 truncate font-semibold">{f.home}</span>
           {f.live && (
             <b className="shrink-0 text-[11px] font-extrabold tabular-nums text-[#263238] sm:text-sm">
@@ -55,6 +79,7 @@ export default function MatchRow({
           )}
         </div>
         <div className="flex min-w-0 items-center gap-1">
+          <TeamCrest src={f.awayLogo} />
           <span className="min-w-0 flex-1 truncate font-medium text-[#657078]">{f.away}</span>
           {f.live && (
             <b className="shrink-0 text-[11px] font-extrabold tabular-nums text-[#263238] sm:text-sm">

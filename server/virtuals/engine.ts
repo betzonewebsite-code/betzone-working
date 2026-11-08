@@ -1,4 +1,4 @@
-﻿import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { db } from "../../src/lib/server/db";
 import { env } from "../../src/lib/server/env";
@@ -7,7 +7,6 @@ import { loop } from "../workers/settlement";
 import {
   PREMIER_LEAGUE_TEAMS,
   CHAMPIONSHIP_TEAMS,
-  draw,
   lambdas,
   marketProbs,
   price,
@@ -142,6 +141,77 @@ const POOLS: {
   },
 ];
 
+type ScheduledPair = {
+  home: Team;
+  away: Team;
+};
+
+function buildRoundRobinSchedule(
+  teams: Team[],
+  pinnedPairs: Array<{ home: string; away: string }>,
+): ScheduledPair[][] {
+  if (teams.length < 2 || teams.length % 2 !== 0) {
+    throw new Error("Round-robin scheduling requires an even number of teams.");
+  }
+
+  const teamByName = new Map(teams.map((team) => [team.name, team]));
+  const used = new Set<string>();
+  const firstDay: ScheduledPair[] = [];
+
+  for (const pair of pinnedPairs) {
+    const home = teamByName.get(pair.home);
+    const away = teamByName.get(pair.away);
+
+    if (!home || !away || home.name === away.name) continue;
+    if (used.has(home.name) || used.has(away.name)) continue;
+
+    firstDay.push({ home, away });
+    used.add(home.name);
+    used.add(away.name);
+  }
+
+  const remaining = teams.filter((team) => !used.has(team.name));
+  const remainingPairs: ScheduledPair[] = [];
+
+  for (let i = 0; i < remaining.length; i += 2) {
+    remainingPairs.push({
+      home: remaining[i],
+      away: remaining[i + 1],
+    });
+  }
+
+  firstDay.push(...remainingPairs);
+
+  const homeTeams = firstDay.map((pair) => pair.home);
+  const awayTeams = firstDay.map((pair) => pair.away);
+
+  let rotation = [...homeTeams, ...awayTeams.reverse()];
+  const schedule: ScheduledPair[][] = [];
+
+  for (let matchday = 0; matchday < teams.length - 1; matchday++) {
+    const fixtures: ScheduledPair[] = [];
+
+    for (let i = 0; i < teams.length / 2; i++) {
+      const first = rotation[i];
+      const second = rotation[teams.length - 1 - i];
+
+      if (matchday === 0 || (matchday + i) % 2 === 0) {
+        fixtures.push({ home: first, away: second });
+      } else {
+        fixtures.push({ home: second, away: first });
+      }
+    }
+
+    schedule.push(fixtures);
+
+    const fixed = rotation[0];
+    const moving = rotation.slice(1);
+    moving.unshift(moving.pop()!);
+    rotation = [fixed, ...moving];
+  }
+
+  return schedule;
+}
 async function getLeague(pool: (typeof POOLS)[number]) {
   return db.league.upsert({
     where: { source_externalId: { source: "betzone", externalId: pool.key } },
@@ -172,13 +242,16 @@ async function nextRoundNumber() {
   return (last?.number ?? 0) + 1;
 }
 
-async function createFixture(pool: (typeof POOLS)[number], leagueId: string, usedTeams: Set<string>) {
+async function createFixture(
+  pool: (typeof POOLS)[number],
+  leagueId: string,
+  home: Team,
+  away: Team,
+  season: number,
+  matchday: number,
+) {
   const number = await nextRoundNumber();
   const seed = randomBytes(32).toString("hex");
-  const availableTeams = pool.teams.filter((team) => !usedTeams.has(team.name));
-  if (availableTeams.length < 2) return false;
-  const [pair] = draw(seed, 1, availableTeams);
-  const [home, away] = pair;
   const { lamH, lamA } = lambdas(home, away);
   const p = marketProbs(lamH, lamA);
   const margin = env.VIRTUALS_MARGIN_PCT / 100;
@@ -409,6 +482,8 @@ async function createFixture(pool: (typeof POOLS)[number], leagueId: string, use
   await db.virtualRound.create({
     data: {
       number,
+      season,
+      matchday,
       seed,
       seedHash: sha(seed),
       betsCloseAt: notStarted,
@@ -418,8 +493,6 @@ async function createFixture(pool: (typeof POOLS)[number], leagueId: string, use
     },
   });
 
-  usedTeams.add(home.name);
-  usedTeams.add(away.name);
   console.log(`[virtuals] created ${pool.key}: ${home.name} v ${away.name}`);
   return true;
 }
@@ -590,43 +663,130 @@ async function addMissingMarketsToOpenFixtures() {
 }
 async function ensureFixturePools() {
   await addMissingMarketsToOpenFixtures();
-  const activeRounds = await db.virtualRound.findMany({
-    where: { status: { in: ["BETTING", "PLAYING"] } },
-    select: { matches: true },
+
+  const historyRounds = await db.virtualRound.findMany({
+    select: {
+      id: true,
+      number: true,
+      season: true,
+      matchday: true,
+      status: true,
+      matches: true,
+    },
   });
 
-  const activeIds = activeRounds.flatMap((round) =>
-    (round.matches as RoundMatch[]).map((match) => match.fixtureId)
-  );
-
-  const activeFixtures = activeIds.length
-    ? await db.fixture.findMany({
-        where: { id: { in: activeIds } },
-        select: { league: { select: { externalId: true } }, homeTeam: true, awayTeam: true },
-      })
-    : [];
-
-  const counts = new Map<string, number>();
-  const usedByLeague = new Map<string, Set<string>>();
-  for (const fixture of activeFixtures) {
-    const key = fixture.league.externalId;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-    const used = usedByLeague.get(key) ?? new Set<string>();
-    used.add(fixture.homeTeam);
-    used.add(fixture.awayTeam);
-    usedByLeague.set(key, used);
-  }
-
   for (const pool of POOLS) {
-    const league = await getLeague(pool);
-    const current = counts.get(pool.key) ?? 0;
-    const missing = Math.max(0, pool.fixtures - current);
+    const records: {
+      id: string;
+      season: number;
+      matchday: number;
+      status: string;
+      match: RoundMatch;
+    }[] = [];
 
-    for (let i = 0; i < missing; i++) {
-      const used = usedByLeague.get(pool.key) ?? new Set<string>();
-      usedByLeague.set(pool.key, used);
-      if (!(await createFixture(pool, league.id, used))) break;
+    for (const round of historyRounds) {
+      const matches = Array.isArray(round.matches)
+        ? round.matches as unknown as RoundMatch[]
+        : [];
+
+      const match = matches.find((item) => item.leagueKey === pool.key);
+      if (!match) continue;
+
+      const season = round.season ?? 1;
+      const matchday = round.matchday ?? 1;
+
+      if (round.season == null || round.matchday == null) {
+        await db.virtualRound.update({
+          where: { id: round.id },
+          data: { season, matchday },
+        });
+      }
+
+      records.push({
+        id: round.id,
+        season,
+        matchday,
+        status: round.status,
+        match,
+      });
     }
+
+    let season = Math.max(1, ...records.map((item) => item.season));
+
+    let matchday = Math.max(
+      1,
+      ...records
+        .filter((item) => item.season === season)
+        .map((item) => item.matchday),
+    );
+
+    const totalMatchdays = pool.teams.length - 1;
+
+    let currentRounds = records.filter(
+      (item) => item.season === season && item.matchday === matchday,
+    );
+
+    // Advance only when every expected fixture in the current matchday is finished.
+    while (
+      currentRounds.length >= pool.fixtures &&
+      currentRounds.every((item) => item.status === "DONE")
+    ) {
+      if (matchday < totalMatchdays) {
+        matchday++;
+      } else {
+        season++;
+        matchday = 1;
+      }
+
+      currentRounds = records.filter(
+        (item) => item.season === season && item.matchday === matchday,
+      );
+    }
+
+    // Preserve the already completed first-matchday pairings.
+    const pinnedPairs = season === 1
+      ? records
+          .filter((item) => item.season === 1 && item.matchday === 1)
+          .map((item) => ({
+            home: item.match.home,
+            away: item.match.away,
+          }))
+      : [];
+
+    const schedule = buildRoundRobinSchedule(pool.teams, pinnedPairs);
+    const scheduledFixtures = schedule[matchday - 1] ?? [];
+
+    const pairKey = (home: string, away: string) =>
+      [home, away].sort().join("|");
+
+    const existingPairs = new Set(
+      currentRounds.map((item) => pairKey(item.match.home, item.match.away)),
+    );
+
+    const missingFixtures = scheduledFixtures.filter(
+      (pair) => !existingPairs.has(pairKey(pair.home.name, pair.away.name)),
+    );
+
+    const missingCount = Math.max(0, pool.fixtures - currentRounds.length);
+
+    if (missingCount === 0) continue;
+
+    const league = await getLeague(pool);
+
+    for (const pair of missingFixtures.slice(0, missingCount)) {
+      await createFixture(
+        pool,
+        league.id,
+        pair.home,
+        pair.away,
+        season,
+        matchday,
+      );
+    }
+
+    console.log(
+      `[virtuals] ${pool.key}: season ${season}, matchday ${matchday}, created ${Math.min(missingFixtures.length, missingCount)} fixture(s)`,
+    );
   }
 }
 
